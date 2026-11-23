@@ -7,7 +7,7 @@ on:
 
 env:
   TF_VERSION: "1.9.8"
-  LOCALSTACK_IMAGE: localstack/localstack:3.8.1
+  LOCALSTACK_IMAGE: localstack/localstack:4.0.3
 
 jobs:
   lambda:

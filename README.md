@@ -58,7 +58,7 @@ Needs Terraform 1.9+, Docker, and the AWS CLI.
 
 ```
 docker run -d --name localstack -p 4566:4566 \
-  -v /var/run/docker.sock:/var/run/docker.sock localstack/localstack:3.8.1
+  -v /var/run/docker.sock:/var/run/docker.sock localstack/localstack:4.0.3
 
 export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1
 export TF_VAR_localstack_endpoint=http://localhost:4566
