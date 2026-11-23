@@ -85,7 +85,7 @@ jobs:
         run: |
           docker run -d --name localstack -p 4566:4566 \
             -v /var/run/docker.sock:/var/run/docker.sock \
-            -e SERVICES=s3,dynamodb,lambda,iam,logs,ec2,sts \
+            -e SERVICES=s3,dynamodb,lambda,iam,logs,ec2,sts,kms \
             "$LOCALSTACK_IMAGE"
           for i in $(seq 1 40); do
             if curl -sf http://localhost:4566/_localstack/health > /dev/null; then
