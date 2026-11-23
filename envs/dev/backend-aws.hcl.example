@@ -1,0 +1,7 @@
+# Copy to backend-aws.hcl, put your own names in, then:
+#   terraform init -backend-config=backend-aws.hcl
+bucket         = "your-company-tfstate"
+key            = "dev/terraform.tfstate"
+region         = "us-east-1"
+dynamodb_table = "your-company-tflock"
+encrypt        = true
