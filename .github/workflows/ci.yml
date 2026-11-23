@@ -1,0 +1,144 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  TF_VERSION: "1.9.8"
+  LOCALSTACK_IMAGE: localstack/localstack:3.8.1
+
+jobs:
+  lambda:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: pytest -q
+
+  static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: terraform fmt
+        run: terraform fmt -check -recursive
+
+      # -backend=false: download providers only, never touch any state.
+      - name: terraform validate (bootstrap, dev, prod)
+        run: |
+          for dir in bootstrap envs/dev envs/prod; do
+            echo "== $dir"
+            terraform -chdir="$dir" init -backend=false -input=false > /dev/null
+            terraform -chdir="$dir" validate
+          done
+
+      - uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: v0.54.0
+      - name: tflint
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          tflint --init
+          tflint --recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: checkov
+        run: |
+          pip install checkov==3.2.286
+          checkov --config-file .checkov.yaml
+
+  localstack:
+    needs: [lambda, static]
+    runs-on: ubuntu-latest
+    env:
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
+      TF_IN_AUTOMATION: "true"
+      TF_VAR_localstack_endpoint: http://localhost:4566
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      # Started with docker run, not as a service container: LocalStack must
+      # start the Lambda containers itself, so it needs the Docker socket
+      # and the default Docker network.
+      - name: Start LocalStack
+        run: |
+          docker run -d --name localstack -p 4566:4566 \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -e SERVICES=s3,dynamodb,lambda,iam,logs,ec2,sts \
+            "$LOCALSTACK_IMAGE"
+          for i in $(seq 1 40); do
+            if curl -sf http://localhost:4566/_localstack/health > /dev/null; then
+              echo "LocalStack is up"; exit 0
+            fi
+            sleep 3
+          done
+          docker logs localstack
+          exit 1
+
+      - name: bootstrap - state bucket and lock table
+        working-directory: bootstrap
+        run: |
+          terraform init -input=false
+          terraform apply -auto-approve -input=false
+
+      - name: dev - init with the remote S3 backend
+        working-directory: envs/dev
+        run: terraform init -input=false -backend-config=backend-localstack.hcl
+
+      - name: dev - plan
+        working-directory: envs/dev
+        run: |
+          terraform plan -input=false -out=tfplan
+          {
+            echo "### terraform plan (dev, LocalStack)"
+            echo '```'
+            terraform show -no-color tfplan
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: dev - apply
+        working-directory: envs/dev
+        run: terraform apply -input=false tfplan
+
+      - name: dev - a second plan must be empty
+        working-directory: envs/dev
+        run: terraform plan -input=false -detailed-exitcode
+
+      - name: State is in the S3 bucket, lock table exists
+        run: |
+          aws --endpoint-url http://localhost:4566 s3 ls s3://cloud-iac-lab-tfstate/dev/
+          aws --endpoint-url http://localhost:4566 dynamodb describe-table \
+            --table-name cloud-iac-lab-tflock --query 'Table.TableStatus'
+
+      - name: Smoke test
+        run: bash scripts/smoke.sh
+
+      - name: dev - destroy
+        if: always()
+        working-directory: envs/dev
+        run: terraform destroy -auto-approve -input=false
+
+      - name: LocalStack logs on failure
+        if: failure()
+        run: docker logs localstack | tail -n 150
