@@ -12,7 +12,6 @@ skip-check:
   - CKV_AWS_144 # cross-region replication: a lab does not need a second region
   - CKV_AWS_145 # KMS key on S3: AES256 is on, a customer key adds cost and a key policy to explain
   - CKV2_AWS_61 # lifecycle: present in the storage module, the state bucket keeps all versions on purpose
-  - CKV_AWS_300 # abort-incomplete-uploads rule: LocalStack does not return it, so the AWS provider waits forever on apply
   - CKV2_AWS_62 # event notifications: nothing consumes bucket events
   - CKV_AWS_18  # access logging: would need a second log bucket
   # DynamoDB and CloudWatch
