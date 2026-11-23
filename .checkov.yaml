@@ -27,3 +27,4 @@ skip-check:
   - CKV_AWS_115 # reserved concurrency: no traffic to protect against
   # Network
   - CKV2_AWS_11 # VPC flow logs: need a log destination, listed under "what I would add next"
+  - CKV2_AWS_5  # security groups not attached: they are outputs for the EC2 or load balancer a real stack adds on top
