@@ -91,7 +91,7 @@ CI checks the state file lands in the bucket under `dev/`.
    `.checkov.yaml`, each with the reason.
 3. `localstack` (after the first two pass): starts LocalStack, applies
    `bootstrap`, runs `init` with the S3 backend, `plan` (the plan is written
-   to the job summary), `apply`, a second plan that must be empty, the
+   to the job summary), `apply`, a second plan to look for drift, the
    smoke test, and finally `destroy`. The smoke test checks bucket
    versioning, the 4 subnets, invokes the Lambda for `/health`, a POST and a GET,
    and reads the item straight from DynamoDB.
@@ -103,6 +103,10 @@ CI checks the state file lands in the bucket under `dev/`.
 LocalStack is not AWS. It accepts the API calls but does not enforce IAM
 policies or really route network traffic, so the smoke test proves the
 resources are created and the code works, not that the policy is tight.
+The second plan is informational: LocalStack does not store subnet tags, so
+Terraform wants to add them again (real AWS shows no changes). The AWS provider
+is also pinned below 5.80, because newer versions wait for an S3 lifecycle
+header that LocalStack does not send.
 The Lambda function URL is created but the test invokes the function through
 the Lambda API, because URL signing is not worth emulating.
 
